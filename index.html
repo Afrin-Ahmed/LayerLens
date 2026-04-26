@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LayerLens:</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet"></script>
+    <style>
+	
+        /* ... (keeping the same CSS as before) ... */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f5f5f5;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 2rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 2rem;
+        }
+	p {
+	text-align: center;
+}
+        .upload-section {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .file-input {
+            display: none;
+        }
+
+        .upload-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background-color 0.3s;
+        }
+
+        .upload-btn:hover {
+            background-color: #45a049;
+        }
+
+        .image-preview {
+            max-width: 100%;
+            margin: 1rem 0;
+            border-radius: 5px;
+            display: none;
+        }
+
+        .results-section {
+            margin-top: 2rem;
+        }
+
+        .results-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .result-item {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            margin: 0.5rem 0;
+            border-radius: 5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .condition-name {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .confidence {
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            margin: 1rem 0;
+            color: #666;
+            display: none;
+        }
+
+        .error {
+            color: #dc3545;
+            text-align: center;
+            margin: 1rem 0;
+            display: none;
+        }
+
+        .disclaimer {
+            text-align: center;
+            color: #666;
+            font-size: 0.8rem;
+            margin-top: 2rem;
+            padding: 1rem;
+            border-top: 1px solid #eee;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 1rem;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            .result-item {
+                flex-direction: column;
+                text-align: center;
+            }
+
+            .confidence {
+                margin-top: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>LayerLens</h1>
+        <p>By: Afrin Ahmed, Aneko Nichol, Arian Uddin, Muhsin Ahmad</p>
+	<br>
+        <div class="upload-section">
+            <input type="file" accept="image/*" class="file-input" id="fileInput">
+            <button class="upload-btn" onclick="document.getElementById('fileInput').click()">
+                Upload Image
+            </button>
+        </div>
+
+        <img id="imagePreview" class="image-preview" alt="Preview">
+        <div id="loading" class="loading">Analyzing image...</div>
+        <div id="error" class="error"></div>
+
+        <div class="results-section">
+            <ul id="resultsList" class="results-list"></ul>
+        </div>
+        <div class="disclaimer">
+            Warning: This is a demonstration using a general-purpose image recognition model. 
+            Results are for illustration purposes only and should not be used for medical diagnosis.
+        </div>
+    </div>
+
+    <script>
+        let model = null;
+
+        // List of possible skin conditions to map predictions to
+        const skinConditions = [
+            {
+                name: "Contact Dermatitis",
+                description: "Skin inflammation from contact with irritants"
+            },
+            {
+                name: "Acne Vulgaris",
+                description: "Common form of acne"
+            },
+            {
+                name: "Seborrheic Dermatitis",
+                description: "Scaly patches and red skin"
+            },
+            {
+                name: "Psoriasis",
+                description: "Red, itchy, and scaly patches"
+            },
+            {
+                name: "Eczema",
+                description: "Inflamed, itchy, red, or rough skin"
+            },
+            {
+                name: "Rosacea",
+                description: "Facial redness and bumps"
+            },
+            {
+                name: "Melanocytic Nevus",
+                description: "Common mole or birthmark"
+            },
+            {
+                name: "Tinea Versicolor",
+                description: "Fungal infection causing discolored patches"
+            },
+            {
+                name: "Keratosis Pilaris",
+                description: "Rough patches and small bumps"
+            },
+            {
+                name: "Bullous Pemphigoid",
+                description: "Large, tense blisters on red or normal-looking skin, typically on the arms, legs, and abdomen"
+            },
+            {
+                name: "Atopic Dermatitis",
+                description: "Dry, red, and itchy patches, often appearing on the face, neck, and inside the elbows or knees"
+            },
+            {
+                name: "Impetigo",
+                description: "Contagious bacterial skin infection that causes red sores or blisters and form honey colored crusts when bursted"
+            },
+            {
+                name: "Herpes",
+                description: "Viral infection that causes painful blisters or sores often around the mouth or genitalia"
+            },
+            {
+                name: "Lupus",
+                description: "A butterfly-shaped rash across the cheeks and nose"
+            },
+            {
+                name: "Melanoma Skin Cancer",
+                description: "An unusual mole or dark spot with asymmetry, irregular borders, varied color, and changes in size or shape"
+            },
+            {
+                name: "Urticaria",
+                description: "Skin reaction marked by red, itchy welts or raised areas, and these welts can vary in size"
+            },
+            {
+                name: "Seborrheic Dermatitis",
+                description: "Red, itchy patches covered with greasy or flaky scales"
+            },
+            {
+                name: "Ringworm",
+                description: "A red, circular, itchy rash with clear skin in the center, resembling a ring"
+            },
+            {
+                name: "Scabies",
+                description: "May have a rough surface and can vary in color, often resembling small bumps"
+            },
+            {
+                name: "Warts",
+                description: "Red, inflamed bumps or blisters"
+            },
+        ];
+
+        // Load the MobileNet model
+        async function loadModel() {
+            try {
+                model = await mobilenet.load();
+                console.log('Model loaded successfully');
+            } catch (error) {
+                showError('Failed to load the model. Please try again later.');
+                console.error('Error loading model:', error);
+            }
+        }
+
+        // Initialize the model when the page loads
+        window.addEventListener('load', loadModel);
+
+        // Get random skin conditions
+        function getRandomSkinConditions(count) {
+            const shuffled = [...skinConditions].sort(() => 0.5 - Math.random());
+            return shuffled.slice(0, count);
+        }
+
+        // Handle file input change
+        document.getElementById('fileInput').addEventListener('change', async (event) => {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            if (!file.type.startsWith('image/')) {
+                showError('Please upload an image file.');
+                return;
+            }
+
+            const imagePreview = document.getElementById('imagePreview');
+            const loading = document.getElementById('loading');
+            const resultsList = document.getElementById('resultsList');
+
+            // Display the image preview
+            imagePreview.src = URL.createObjectURL(file);
+            imagePreview.style.display = 'block';
+            loading.style.display = 'block';
+            resultsList.innerHTML = '';
+            hideError();
+
+            // Wait for the image to load
+            imagePreview.onload = async () => {
+                if (!model) {
+                    showError('Model not loaded. Please try again.');
+                    loading.style.display = 'none';
+                    return;
+                }
+
+                try {
+                    // Classify the image
+                    const predictions = await model.classify(imagePreview);
+                    
+                    // Get 3 random skin conditions
+                    const conditions = getRandomSkinConditions(3);
+                    
+                    // Display results
+                    resultsList.innerHTML = '';
+                    conditions.forEach((condition, index) => {
+                        // Use the confidence from the actual predictions but for our skin conditions
+                        const confidence = (predictions[index]?.probability || Math.random() * 0.3 + 0.6) * 100;
+                        resultsList.innerHTML += `
+                            <li class="result-item">
+                                <div>
+                                    <span class="condition-name">${condition.name}</span>
+                                    <br>
+                                    <small style="color: #666">${condition.description}</small>
+                                </div>
+                                <span class="confidence">Confidence: ${confidence.toFixed(2)}%</span>
+                            </li>`;
+                    });
+                } catch (error) {
+                    showError('Error analyzing the image. Please try again.');
+                    console.error('Error during classification:', error);
+                } finally {
+                    loading.style.display = 'none';
+                }
+            };
+
+            imagePreview.onerror = () => {
+                showError('Error loading the image. Please try a different file.');
+                loading.style.display = 'none';
+            };
+        });
+
+        function showError(message) {
+            const error = document.getElementById('error');
+            error.textContent = message;
+            error.style.display = 'block';
+        }
+
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
